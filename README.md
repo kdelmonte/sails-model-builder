@@ -149,6 +149,7 @@ Sets a new attribute or extends it if it already exists. This method supports th
     modelBuilder.attr('name', 'maxLength', 45);
 
 3) One that accepts a list of attribute names and an object that contains shared properties between those attributes
+
     modelBuilder.attr(['firstName','lastName'],{
         type: 'string',
         required: true,
