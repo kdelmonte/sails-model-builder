@@ -1,0 +1,29 @@
+{
+  "name": "sails-model-builder",
+  "version": "1.0.0",
+  "description": "Code over configuration approach to designing sails models",
+  "main": "sails-model-builder.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kdelmonte/sails-model-builder.git"
+  },
+  "keywords": [
+    "sails",
+    "model",
+    "builder"
+  ],
+  "author": "Kelvin Del Monte <kdelmonten@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kdelmonte/sails-model-builder/issues"
+  },
+  "homepage": "https://github.com/kdelmonte/sails-model-builder#readme",
+  "dependencies": {
+    "lodash": "^3.9.3",
+    "mayordomo": "^1.0.0",
+    "node-uuid": "^1.4.3"
+  }
+}
