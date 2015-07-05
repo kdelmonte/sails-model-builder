@@ -234,7 +234,7 @@ module.exports = function () {
       
       return this;
     },
-    // Sets the working model to the exports of the module that is passed in
+    // Sets the working model as the exports of the module that is passed in
     export: function (to) {
       to.exports = workingModel;
 
