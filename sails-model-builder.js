@@ -42,7 +42,7 @@ module.exports = function () {
       
       // Setup the lifecycle callabck as a function that will be 
       // responsible for triggering the event handlers
-      modelBuilder.workingModel[lifecycleName] = function (instance, cb) {
+      workingModel[lifecycleName] = function (instance, cb) {
         // If nobody has subscribed to this lifecycle, run callback immediately
         if (!eventManager.any(lifecycleName)) {
           cb();
@@ -84,33 +84,34 @@ module.exports = function () {
   // Declare the events (with shortcuts) in the event manager
   eventManager.declare(lifecycles, true);
 
-  var modelBuilder = {
-    // Declare the working model
-    workingModel: {
-      attributes: {}
-    },
+  // Declare the working model
+  var workingModel = {
+    attributes: {}
+  };
+
+  var modelBuilder = {    
     // Sets or retrieves the working model
     model: function (model) {
       // If no arguments were passed, then this is just a getter
-      if (!arguments.length) return modelBuilder.workingModel;
+      if (!arguments.length) return workingModel;
       
       // Assign the model as the working model 
-      modelBuilder.workingModel = model;
+      workingModel = model;
       
       // If the model that was passed does not contain attributes,
       // then set the attributes as an empty object
-      if (!modelBuilder.workingModel.attributes) {
-        modelBuilder.workingModel.attributes = {};
+      if (!workingModel.attributes) {
+        workingModel.attributes = {};
       }
       
       // Setup the lifecycle events
-      setupLifecycleEvents(modelBuilder.workingModel);
+      setupLifecycleEvents(workingModel);
 
       return this;
     },
-    // Adds the `id` property as a UUID to the working model
+    // Adds the `id` attribute as an UUID to the working model
     uuidKey: function () {
-      modelBuilder.workingModel.attributes.id = {
+      workingModel.attributes.id = {
         type: 'string',
         unique: true,
         primaryKey: true,
@@ -121,9 +122,9 @@ module.exports = function () {
 
       return this;
     },
-    // Adds the `id` property as an integer to the working model
+    // Adds the `id` attribute as an integer to the working model
     intKey: function (autoIncrement) {
-      modelBuilder.workingModel.attributes.id = {
+      workingModel.attributes.id = {
         type: 'integer',
         unique: true,
         primaryKey: true,
@@ -138,7 +139,7 @@ module.exports = function () {
       var attributeNames;
       if (!arguments.length) {
         // Since no arguments were passed, get all the current attribute names
-        attributeNames = _.keys(modelBuilder.workingModel.attributes);
+        attributeNames = _.keys(workingModel.attributes);
       } else {
         // If the first argument is an array then use it.
         // Otherwise use the entire arguments object as the list
@@ -173,7 +174,7 @@ module.exports = function () {
         _.each(attributes, function (attribute, attributeName) {
           // Get the existing attribute from the working model
           // If none is found then set it as an empty object
-          currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+          currentAttribute = workingModel.attributes[attributeName] || {};
           
           // If current attribute is not a function, then extend it.
           // Otherwise, leave it alone
@@ -184,7 +185,7 @@ module.exports = function () {
           }
           
           // Set the new extended attribute to the working model
-          modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
+          workingModel.attributes[attributeName] = currentAttribute;
         });
         
         return this;
@@ -200,13 +201,13 @@ module.exports = function () {
         
         // Get the existing attribute from the working model
         // If none is found then set it as an empty object
-        currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+        currentAttribute = workingModel.attributes[attributeName] || {};
         
         // Set the the value to the target property
         currentAttribute[propertyName] = value;
         
         // Set the updated attribute to the working model
-        modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
+        workingModel.attributes[attributeName] = currentAttribute;
         
         return this;
       }
@@ -222,20 +223,20 @@ module.exports = function () {
       _.each(attributes, function (attributeName) {
         // Get the existing attribute from the working model
         // If none is found then set it as an empty object
-        currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+        currentAttribute = workingModel.attributes[attributeName] || {};
         
         // Copy over all the shared properties
         _.extend(currentAttribute, sharedProperties);
         
         // Set the new extended attribute to the working model
-        modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
+        workingModel.attributes[attributeName] = currentAttribute;
       });
       
       return this;
     },
-    // Sets the working model to the exports
+    // Sets the working model to the exports of the module that is passed in
     export: function (to) {
-      to.exports = modelBuilder.workingModel;
+      to.exports = workingModel;
 
       return this;
     }
