@@ -8,8 +8,12 @@
 var _ = require('lodash');
 var uuid = require('node-uuid');
 
-// Setup lifecycle events in mayordomo for event management
-var lifeCycles = [
+// mayordomo event manager (https://github.com/kdelmonte/mayordomo)
+var mayordomo = require('mayordomo');
+
+// List sails model lifecycles. We will use these later 
+// to create subscribable events for each one
+var lifecycles = [
   'beforeValidate',
   'afterValidate',
   'beforeCreate',
@@ -20,32 +24,93 @@ var lifeCycles = [
   'afterDestroy'
 ];
 
-// Create a whitelist of properties to copy from rodnis
-// This is a combination of the rodnis standard event method
-// and the addition of sails model lifecycles
-var mayordomoEvents = _.flatten(['on', 'off', 'trigger', lifeCycles])
+// Create a whitelist of properties to copy from mayordomo
+// This is a combination of the mayordomo event methods (on, off, trigger)
+// and the sails model lifecycles
+var mayordomoEvents = _.flatten(['on', 'off', 'trigger', lifecycles]);
 
 module.exports = function () {
-  var mayordomo = require('mayordomo').new();
+  // Create new instance of event manager
+  var eventManager = mayordomo.new();
+  
+  // Sets up the lifecycle callbacks of Sails models as subscribable events
+  // See more here: http://sailsjs.org/documentation/concepts/models-and-orm/lifecycle-callbacks
+  function setupLifecycleEvents () {
+    
+    // Go through all Sails models lifecycles
+    _.each(lifecycles, function (lifecycleName) {
+      
+      // Setup the lifecycle callabck as a function that will be 
+      // responsible for triggering the event handlers
+      modelBuilder.workingModel[lifecycleName] = function (instance, cb) {
+        // If nobody has subscribed to this lifecycle, run callback immediately
+        if (!eventManager.any(lifecycleName)) {
+          cb();
+          return;
+        }
+        
+        // `orphanCallback` will allow us to know if any of the handlers called the cb() callback
+        // of the lifecycle
+        var orphanCallback = true;
+        
+        // the `adopt` callback lets us know that the user assumed responsibility of running the callback
+        var adopt = function () {
+          orphanCallback = false;
+        };
+        
+        // Wrap sails callback in order to know if any handlers ran or plan to run the callback manually
+        var wrappedCb = _.wrap(cb, function (fx, message) {
+          // This callback is not an orphan anymore
+          adopt();
+          
+          // Run the sails lifecycle cb()
+          fx(message);
+        });
+        
+        // Trigger all event handlers of this lifecycle
+        eventManager.trigger(lifecycleName, [instance, wrappedCb, adopt]);
+        
+        // If the lifecycle cb() did not run, let's run it to get the response out of limbo
+        if (orphanCallback) {
+          cb();
+        }
+      };
+    });
+  
+  
+    return this;
+  }
 
-  // Declare the events in mayordomo
-  mayordomo.declare(lifeCycles, true);
+  // Declare the events (with shortcuts) in the event manager
+  eventManager.declare(lifecycles, true);
 
   var modelBuilder = {
-    create: function (model) {
-      if (!model) model = {};
-      modelBuilder.currentModel = model;
-      if (!modelBuilder.currentModel.attributes) {
-        modelBuilder.currentModel.attributes = {};
+    // Declare the working model
+    workingModel: {
+      attributes: {}
+    },
+    // Sets or retrieves the working model
+    model: function (model) {
+      // If no arguments were passed, then this is just a getter
+      if (!arguments.length) return modelBuilder.workingModel;
+      
+      // Assign the model as the working model 
+      modelBuilder.workingModel = model;
+      
+      // If the model that was passed does not contain attributes,
+      // then set the attributes as an empty object
+      if (!modelBuilder.workingModel.attributes) {
+        modelBuilder.workingModel.attributes = {};
       }
-      modelBuilder.setUpLifecycleEvents();
+      
+      // Setup the lifecycle events
+      setupLifecycleEvents(modelBuilder.workingModel);
+
       return this;
     },
-    model: function () {
-      return modelBuilder.currentModel;
-    },
+    // Adds the `id` property as a UUID to the working model
     uuidKey: function () {
-      modelBuilder.currentModel.attributes.id = {
+      modelBuilder.workingModel.attributes.id = {
         type: 'string',
         unique: true,
         primaryKey: true,
@@ -53,112 +118,139 @@ module.exports = function () {
           return uuid.v4();
         }
       };
+
       return this;
     },
+    // Adds the `id` property as an integer to the working model
     intKey: function (autoIncrement) {
-      modelBuilder.currentModel.attributes.id = {
+      modelBuilder.workingModel.attributes.id = {
         type: 'integer',
         unique: true,
         primaryKey: true,
         autoIncrement: autoIncrement === undefined ? true : autoIncrement
       };
+
       return this;
     },
+    // Sets a list of attributes as required. 
+    // If no list is provided, all attributes will be marked as required. 
     require: function () {
-      var list;
+      var attributeNames;
       if (!arguments.length) {
-        list = _.keys(modelBuilder.currentModel.attributes);
+        // Since no arguments were passed, get all the current attribute names
+        attributeNames = _.keys(modelBuilder.workingModel.attributes);
       } else {
         // If the first argument is an array then use it.
         // Otherwise use the entire arguments object as the list
-        if(_.isArray(arguments[0])){
-          list = arguments[0]
-        }else{
-          list = _.toArray(arguments);
+        if (_.isArray(arguments[0])) {
+          attributeNames = arguments[0]
+        } else {
+          attributeNames = _.toArray(arguments);
         }
-
       }
-      return modelBuilder.attr(list, {
+      
+      // Make the specified attributes required
+      modelBuilder.attr(attributeNames, {
         required: true
       });
+
+      return this;
     },
+    // Sets or extends attributes of the working model
+    // This method supports three overloads:
+    // 1) One that accepts an attributes object
+    //  Example: .attr({name: {type: 'string', maxLength: 45}})
+    // 2) One that accepts an attribute name, a property name, and a property value
+    //  Example: .attr('name', 'type', 'string')
+    // 3) One that accepts a list of attribute names and an object that contains shared properties between those attributes
+    //  Example: .attr(['parentId','childId'],{type: 'string',minLength: 36, maxLength: 36})
     attr: function (attributes, sharedProperties, value) {
       var currentAttribute;
+      
+      // If the first argument is an object, then we are dealing with overload #1
       if (!_.isArray(attributes) && _.isObject(attributes)) {
+        // Loop through all the attributes
         _.each(attributes, function (attribute, attributeName) {
-          currentAttribute = modelBuilder.currentModel.attributes[attributeName] || {};
-          //If the value of the attribute is not a function, then extend it.
+          // Get the existing attribute from the working model
+          // If none is found then set it as an empty object
+          currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+          
+          // If current attribute is not a function, then extend it.
           // Otherwise, leave it alone
-          if(!_.isFunction(attribute)){
+          if (!_.isFunction(attribute)) {
             _.extend(currentAttribute, attribute);
-          }else{
+          } else {
             currentAttribute = attribute;
           }
-          modelBuilder.currentModel.attributes[attributeName] = currentAttribute;
+          
+          // Set the new extended attribute to the working model
+          modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
         });
+        
         return this;
       }
 
+      // If three arguments were passed, then we are dealing with overload #2
       if (arguments.length === 3) {
-        var attributeName = attributes;
-        var propertyName = sharedProperties;
-        currentAttribute = modelBuilder.currentModel.attributes[attributeName] || {};
+        // The first argument is the attribute name
+        var attributeName = arguments[0];
+        
+        // The second attribute is the property name
+        var propertyName = arguments[1];
+        
+        // Get the existing attribute from the working model
+        // If none is found then set it as an empty object
+        currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+        
+        // Set the the value to the target property
         currentAttribute[propertyName] = value;
-        modelBuilder.currentModel.attributes[attributeName] = currentAttribute;
+        
+        // Set the updated attribute to the working model
+        modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
+        
+        return this;
       }
-
-      if (!_.isArray(attributes)) {
+      
+      // If we are here, then we are dealing with overload #3
+      // If the user passed in a single attribute name in the first argument
+      // then let's put it inside of an array to handle it the same way below
+      if (!_.isArray(attributes)) {        
         attributes = [attributes];
       }
+      
+      // Go through all the attribute names that were passed
       _.each(attributes, function (attributeName) {
-        currentAttribute = modelBuilder.currentModel.attributes[attributeName] || {};
+        // Get the existing attribute from the working model
+        // If none is found then set it as an empty object
+        currentAttribute = modelBuilder.workingModel.attributes[attributeName] || {};
+        
+        // Copy over all the shared properties
         _.extend(currentAttribute, sharedProperties);
-        modelBuilder.currentModel.attributes[attributeName] = currentAttribute;
+        
+        // Set the new extended attribute to the working model
+        modelBuilder.workingModel.attributes[attributeName] = currentAttribute;
       });
+      
       return this;
     },
-    setUpLifecycleEvents: function () {
-      _.each(lifeCycles, function (lc) {
-        modelBuilder.currentModel[lc] = function (instance, cb) {
-          // If nobody has subscribed to this lifecycle, run callback immediately
-          if (!mayordomo.any(lc)) {
-            cb();
-            return;
-          }
-          var orphanCallback = true;
-          // Adopt callback lets us know that user assumes responsibility of running the callback
-          var adopt = function(){
-            orphanCallback = false;
-          };
-          // Wrap sails callback in order to know if any handlers ran or plan to run the callback manually
-
-          var wrappedCb = _.wrap(cb, function (fx, message) {
-            adopt();
-            fx(message);
-          });
-          mayordomo.trigger(lc, [instance, wrappedCb, adopt]);
-          // If the callback did not run, let's run it to get the response out of limbo
-          if (orphanCallback) {
-            cb();
-          }
-        };
-      });
-      return this;
-    },
+    // Sets the working model to the exports
     export: function (to) {
-      to.exports = modelBuilder.currentModel;
+      to.exports = modelBuilder.workingModel;
+
       return this;
     }
   };
 
-  // Extend model builder with mayordomo event dispatcher
-  _.extend(modelBuilder, _.pick(mayordomo, function (value, key) {
+  // Extend model builder with certain members of the event manager
+  _.extend(modelBuilder, _.pick(eventManager, function (value, key) {
     return _.contains(mayordomoEvents, key);
   }));
-  modelBuilder.declareEvent = mayordomo.declare;
 
-  // Setup chaining object to `modelBuilder` in mayordomo
-  mayordomo.chain(modelBuilder);
+  // Setup chaining object to `modelBuilder` in `eventManager` so that
+  // when users call on() or any other of the methods copied over from the
+  // `eventManager` they will get the `modelBuilder` to continue chaining
+  eventManager.chain(modelBuilder);
 
+  // Finally, return the modelBuilder
   return modelBuilder;
 };
