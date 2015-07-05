@@ -132,7 +132,7 @@ Takes all the attributes passed in and marks them as required. If this method is
 
 ### attr()
 
-Sets or extends attributes of the working model. This method supports three overloads:
+Sets a new attribute or extends it if it already exists. This method supports three overloads:
 
 1) One that accepts an attributes object
 
