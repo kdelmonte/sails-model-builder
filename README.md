@@ -8,7 +8,7 @@ sails-model-builder allows you to take the code over configuration approach when
 
 ## Usage
 
-A sails model ususally looks like this:
+A sails model usually looks like this:
 
     var uuid = require('node-uuid');
     var bcrypt = require('bcrypt');
