@@ -1,6 +1,6 @@
 {
   "name": "sails-model-builder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Code over configuration approach to designing sails models",
   "main": "sails-model-builder.js",
   "scripts": {
