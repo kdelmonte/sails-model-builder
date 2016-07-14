@@ -5,6 +5,9 @@
  * @docs        :: http://sailsjs.org/#!documentation/models
  */
 
+/* jshint node:true */
+'use strict';
+
 var _ = require('lodash');
 var uuid = require('node-uuid');
 
@@ -36,7 +39,6 @@ module.exports = function () {
   // Sets up the lifecycle callbacks of Sails models as subscribable events
   // See more here: http://sailsjs.org/documentation/concepts/models-and-orm/lifecycle-callbacks
   function setupLifecycleEvents () {
-    
     // Go through all Sails models lifecycles
     _.each(lifecycles, function (lifecycleName) {
       
@@ -76,9 +78,6 @@ module.exports = function () {
         }
       };
     });
-  
-  
-    return this;
   }
 
   // Declare the events (with shortcuts) in the event manager
@@ -88,6 +87,8 @@ module.exports = function () {
   var workingModel = {
     attributes: {}
   };
+
+  setupLifecycleEvents();
 
   var modelBuilder = {    
     // Sets or retrieves the working model
@@ -105,7 +106,7 @@ module.exports = function () {
       }
       
       // Setup the lifecycle events
-      setupLifecycleEvents(workingModel);
+      setupLifecycleEvents();
 
       return this;
     },
@@ -144,7 +145,7 @@ module.exports = function () {
         // If the first argument is an array then use it.
         // Otherwise use the entire arguments object as the list
         if (_.isArray(arguments[0])) {
-          attributeNames = arguments[0]
+          attributeNames = arguments[0];
         } else {
           attributeNames = _.toArray(arguments);
         }
@@ -234,7 +235,7 @@ module.exports = function () {
       
       return this;
     },
-    // Sets the working model as the exports of the module that is passed in
+    // Sets the working model to the exports of the module that is passed in
     export: function (to) {
       to.exports = workingModel;
 
